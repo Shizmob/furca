@@ -151,7 +151,7 @@ class Manager(Generic[WorkerT]):
 
         pid = os.fork()
         if pid == 0:
-            for status in self.workers:
+            for status in self.workers.values():
                 status.close()
             waiter.close()
             self.workers = {}
