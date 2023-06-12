@@ -1,6 +1,6 @@
 # furca
 
-Simple pre-fork library, ideas based on gunicorn mninus the WSGI.
+Simple pre-fork library, ideas based on gunicorn minus the WSGI.
 
 ## Example
 
