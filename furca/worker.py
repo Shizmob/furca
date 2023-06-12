@@ -7,19 +7,19 @@ from threading import Thread
 from typing import List, Any, NoReturn, Protocol, TypeVar, Generic
 
 from .comm import PipeNotifier
-from .resource import ResourceWithValue
+from .resource import CreatedResources
 
 
 class Worker:
     notifier: PipeNotifier
-    resources: List[ResourceWithValue[Any]]
+    resources: CreatedResources
     interval: float
 
     def __init__(
         self,
         notifier: PipeNotifier,
         interval: float,
-        resources: List[ResourceWithValue[Any]] = [],
+        resources: CreatedResources = {},
     ) -> None:
         self.notifier = notifier
         self.interval = interval
@@ -29,13 +29,13 @@ class Worker:
         pass
 
 class SyncWorkFn(Protocol):
-    def __call__(self, resources: List[ResourceWithValue[Any]]) -> None:
+    def __call__(self, resources: CreatedResources) -> None:
         ...
 
 class SyncWorker(Worker):
     fn: SyncWorkFn
 
-    def __init__(self, fn: SyncWorkFn, notifier: PipeNotifier, interval: float, resources: List[ResourceWithValue[Any]] = []) -> None:
+    def __init__(self, fn: SyncWorkFn, notifier: PipeNotifier, interval: float, resources: CreatedResources) -> None:
         super().__init__(notifier, interval, resources)
         self.fn = fn
 
@@ -53,13 +53,13 @@ class SyncWorker(Worker):
         self.fn(self.resources)
 
 class AsyncWorkFn(Protocol):
-    async def __call__(self, resources: List[ResourceWithValue[Any]]) -> None:
+    async def __call__(self, resources: CreatedResources) -> None:
         ...
 
 class AsyncWorker(Worker):
     fn: AsyncWorkFn
 
-    def __init__(self, fn: AsyncWorkFn, notifier: PipeNotifier, interval: float, resources: List[ResourceWithValue[Any]]) -> None:
+    def __init__(self, fn: AsyncWorkFn, notifier: PipeNotifier, interval: float, resources: CreatedResources) -> None:
         super().__init__(notifier, interval, resources)
         self.fn = fn
 

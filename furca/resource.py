@@ -20,7 +20,7 @@ from typing import (
     Tuple,
     List,
     Dict,
-    Iterable,
+    Iterator,
 )
 from typing_extensions import Self, TypeAlias
 
@@ -60,7 +60,9 @@ class Resource(Protocol[T]):
     def encode(self, instance: T) -> str:
         ...
 
-ResourceWithValue: TypeAlias = Tuple[Resource[T], T]
+class CreatedResources(Protocol):
+    def __iter__(self) -> Iterator[Resource[Any]]: ...
+    def __getitem__(self, res: Resource[T]) -> T: ...
 
 def encode_fd(fd: int) -> str:
     os.set_inheritable(fd, True)
@@ -239,21 +241,26 @@ def decode_resource_spec(value: str) -> O[Resource[Any]]:
     except:
         return None
 
-def encode_resource_values(resources: Iterable[ResourceWithValue[Any]]) -> str:
+def encode_resource_values(resources: CreatedResources) -> str:
     r = []
-    for rtype, rvalue in resources:
+    for rtype in resources:
         spec = encode_resource_spec(rtype)
+        rvalue = resources[rtype]
         value = rtype.encode(rvalue)
         r.append(f"{value},{spec}")
     return ";".join(r)
 
-def decode_resource_values(values: str) -> List[ResourceWithValue[Any]]:
-    r = []
+def decode_resource_values(values: str) -> CreatedResources:
+    r = {}
     for v in values.split(";"):
         value, spec = v.split(",", 1)
         rtype = decode_resource_spec(spec)
         if not rtype:
-            raise ValueError("no")
-        rvalue = rtype.decode(value)
-        r.append((rtype, rvalue))
+            raise ValueError(f'invalid resource specification: {spec}')
+        if rtype not in r:
+            rvalue = rtype.decode(value)
+            if rvalue is None:
+                r[rtype] = rtype.create()
+            else:
+                r[rtype] = rvalue
     return r

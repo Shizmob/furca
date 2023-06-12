@@ -11,7 +11,7 @@ from types import FrameType
 from typing import Optional as O, Type, Tuple, List, Dict, Callable, Any, TypeVar, Generic
 from typing_extensions import TypeAlias, Self
 
-from .resource import Resource, ResourceWithValue
+from .resource import Resource, CreatedResources
 from .comm import PipeEvent, PipeWaiter, PipeNotifier, PipePortal
 from .worker import Worker
 
@@ -96,27 +96,28 @@ class WorkerStatus:
 
 
 WorkerT = TypeVar('WorkerT', bound=Worker)
+WorkerFn: TypeAlias = Callable[[PipeNotifier, float, CreatedResources], WorkerT]
 
 class Manager(Generic[WorkerT]):
-    worker: Callable[[PipeNotifier, float, List[ResourceWithValue[Any]]], WorkerT]
+    worker: WorkerFn[WorkerT]
     worker_count: int
     workers: Dict[int, WorkerStatus]
     alive_timeout: float
     kill_timeout: float
-    resources: List[ResourceWithValue[Any]]
+    resources: CreatedResources
     fallthrough: bool
 
     handled_signals: Dict[int, Any]
     stop_event: O[PipeEvent]
     child_event: O[PipePortal[Tuple[int, int]]]
 
-    def __init__(self, worker: Callable[[PipeNotifier, float, List[ResourceWithValue[Any]]], WorkerT], count: O[int], alive_timeout: float = 5.0, kill_timeout: float = 5.0, fallthrough: bool = True) -> None:
+    def __init__(self, worker: WorkerFn[WorkerT], count: O[int], alive_timeout: float = 5.0, kill_timeout: float = 5.0, fallthrough: bool = True) -> None:
         self.worker = worker
         self.worker_count = count or os.cpu_count() or 1
         self.workers = {}
         self.alive_timeout = alive_timeout
         self.kill_timeout = kill_timeout
-        self.resources = []
+        self.resources = {}
         self.fallthrough = fallthrough
 
         self.handled_signals = {}
