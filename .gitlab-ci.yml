@@ -11,13 +11,13 @@ code-typing:
   stage: test
   script:
     - pip install -e .[tests]
-    - mypy klzss.py
+    - mypy furca
 
 code-style:
   stage: test
   script:
     - pip install -e .[tests]
-    - yapf --diff klzss.py
+    - yapf --diff -r furca
 
 
 .upload-base:
