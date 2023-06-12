@@ -237,7 +237,7 @@ class Manager(Generic[WorkerT]):
         signal.signal(sig, handler)
         self.handled_signals[sig] = handler
 
-    def run(self) -> None:
+    def run(self, periodics: List[Callable[[], O[bool]]] = []) -> None:
         self.setup()
 
         if not self.stop_event:
@@ -252,9 +252,9 @@ class Manager(Generic[WorkerT]):
             selector = DefaultSelector()
             selector.register(child_event, EVENT_READ, child_event)
             selector.register(stop_event, EVENT_READ, stop_event)
-
             should_stop = False
-            while not should_stop or self.workers:
+
+            def check_worker_count() -> None:
                 if not should_stop:
                     while len(self.workers) > self.worker_count:
                         self.stop_worker()
@@ -263,6 +263,20 @@ class Manager(Generic[WorkerT]):
                         status.reset()
                         if status.waiter:
                             selector.register(status.waiter, EVENT_READ, status)
+
+            def check_worker_timeout() -> None:
+                for status in self.workers.values():
+                    if (should_stop and not status.stopping) or status.is_expired():
+                        if not should_stop:
+                            logger.warning('[worker %d] timeout', status.pid)
+                        self.stop_worker(status)
+
+            periodics = periodics + [check_worker_count, check_worker_timeout]
+
+            while not should_stop or self.workers:
+                for p in periodics:
+                    if p():
+                        should_stop = True
 
                 for key, _ in selector.select(1.0):
                     if key.data == stop_event:
@@ -289,12 +303,6 @@ class Manager(Generic[WorkerT]):
                                 if status.waiter:
                                     selector.unregister(status.waiter)
                                 status.close()
-
-                for status in self.workers.values():
-                    if (should_stop and not status.stopping) or status.is_expired():
-                        if not should_stop:
-                            logger.warning('[worker %d] timeout', status.pid)
-                        self.stop_worker(status)
         finally:
             del stop_event, child_event
             selector.close()
