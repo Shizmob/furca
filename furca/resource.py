@@ -77,7 +77,7 @@ def decode_fd(val: str) -> O[int]:
     except OSError:
         return None
 
-@dataclass
+@dataclass(frozen=True)
 class SocketResource(Generic[AddrT], Resource[SocketType]):
     family: int
     type: int
@@ -115,7 +115,7 @@ class SocketResource(Generic[AddrT], Resource[SocketType]):
 
 IPAddr: TypeAlias = Tuple[O[IPAddress], int]
 
-@dataclass(init=False)
+@dataclass(init=False, frozen=True)
 class IPResource(SocketResource[IPAddr]):
     def __init__(self, type: int, addr: IPAddr, protocol: int = 0) -> None:
         host, port = addr
@@ -170,7 +170,7 @@ class IPResource(SocketResource[IPAddr]):
                 raise ValueError("can not reuse socket (no SO_REUSEPORT available)")
         return super()._bind(s, reuse=reuse)
 
-@dataclass(init=False)
+@dataclass(init=False, frozen=True)
 class TCPResource(IPResource):
     IDENTS = ("tcp", "tcp4", "tcp6")
 
@@ -198,7 +198,7 @@ class TCPResource(IPResource):
             ident = "tcp6"
         return ident, self.encode_addr()
 
-@dataclass(init=False)
+@dataclass(init=False, frozen=True)
 class UDPResource(IPResource):
     IDENTS = ("udp", "udp4", "udp6")
 
