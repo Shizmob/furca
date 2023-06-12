@@ -8,8 +8,8 @@ from selectors import BaseSelector, DefaultSelector, EVENT_READ
 from logging import getLogger
 
 from types import FrameType
-from typing import Optional as O, Tuple, List, Dict, Callable, Any, TypeVar, Generic
-from typing_extensions import TypeAlias
+from typing import Optional as O, Type, Tuple, List, Dict, Callable, Any, TypeVar, Generic
+from typing_extensions import TypeAlias, Self
 
 from .resource import Resource, ResourceWithValue
 from .comm import PipeEvent, PipeWaiter, PipeNotifier, PipePortal
@@ -112,7 +112,7 @@ class Manager(Generic[WorkerT]):
 
     def __init__(self, worker: Callable[[PipeNotifier, float, List[ResourceWithValue[Any]]], WorkerT], count: O[int], alive_timeout: float = 5.0, kill_timeout: float = 5.0, fallthrough: bool = True) -> None:
         self.worker = worker
-        self.worker_count = count or os.cpu_count()
+        self.worker_count = count or os.cpu_count() or 1
         self.workers = {}
         self.alive_timeout = alive_timeout
         self.kill_timeout = kill_timeout
@@ -125,6 +125,13 @@ class Manager(Generic[WorkerT]):
 
     def __del__(self) -> None:
         self.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type: O[Type[BaseException]], exc_value: O[BaseException], traceback: O[FrameType]) -> O[bool]:
+        self.close()
+        return None
 
     def close(self) -> None:
         if self.stop_event:
