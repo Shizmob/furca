@@ -1,0 +1,46 @@
+default:
+  image: python:3.8-slim-buster
+  tags:
+    - docker
+
+stages:
+  - test
+  - deploy
+
+code-typing:
+  stage: test
+  script:
+    - pip install -e .[tests]
+    - mypy klzss.py
+
+code-style:
+  stage: test
+  script:
+    - pip install -e .[tests]
+    - yapf --diff klzss.py
+
+
+.upload-base:
+  stage: deploy
+  script:
+    - pip install build twine
+    - python -m build
+    - twine upload --verbose dist/*
+  variables:
+    TWINE_USERNAME: gitlab-ci-token
+    TWINE_PASSWORD: ${CI_JOB_TOKEN}
+    TWINE_REPOSITORY_URL: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
+
+upload-dev:
+  extends: .upload-base
+  before_script:
+    - sed -i "s/^\(version.*\)\$/\\1-${CI_PIPELINE_ID}/g" setup.cfg
+  only:
+    - branches
+
+upload-release:
+  extends: .upload-base
+  before_script:
+    - sed -i "s/^\(version.*=\).*\$/\\1 ${CI_COMMIT_TAG}/g" setup.cfg
+  only:
+    - tags
