@@ -118,7 +118,7 @@ class SocketResource(Generic[AddrT], Resource[SocketType]):
 IPAddr: TypeAlias = Tuple[O[IPAddress], int]
 
 @dataclass(init=False, frozen=True)
-class IPResource(SocketResource[IPAddr]):
+class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
     def __init__(self, type: int, addr: IPAddr, protocol: int = 0) -> None:
         host, port = addr
         if isinstance(host, IPv6Address):
@@ -131,7 +131,7 @@ class IPResource(SocketResource[IPAddr]):
             else:
                 family = socket.AF_INET
 
-        super().__init__(family, type, addr, protocol)
+        super().__init__(family, type, (host or '', port), protocol)
 
     @classmethod
     def decode_addr(cls, args: List[str]) -> Tuple[O[IPAddr], List[str]]:
