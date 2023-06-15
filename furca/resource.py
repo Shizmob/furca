@@ -118,11 +118,23 @@ class SocketResource(Generic[AddrT], Resource[SocketType]):
 IPAddr: TypeAlias = Tuple[O[IPAddress], int]
 
 @dataclass(init=False, frozen=True)
-class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
+class IPResource(SocketResource[Tuple[str, int]]):
     dualstack: bool
 
     def __init__(self, type: int, addr: IPAddr, protocol: int = 0, dualstack: O[bool] = None) -> None:
         host, port = addr
+
+        if host and not isinstance(host, (IPv4Address, IPv6Address)):
+            for (family, _type, protocol, _canon, addr_info) in socket.getaddrinfo(host, port, type=type, proto=protocol):
+                if family == socket.AF_INET6:
+                    host = IPv6Address(addr_info[0])
+                    break
+                if family == socket.AF_INET:
+                    host = IPv4Address(addr_info[0])
+                    break
+            else:
+                raise ValueError(f'can not resolve {host}')
+
         if isinstance(host, IPv6Address):
             family = socket.AF_INET6
             dualstack_val = dualstack or False
@@ -139,8 +151,10 @@ class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
 
         if dualstack_val and not socket.has_dualstack_ipv6():
             raise ValueError('dual-stack requested but not available')
+
+        # needed due @dataclass(frozen=True)
         object.__setattr__(self, 'dualstack', dualstack_val)
-        super().__init__(family, type, (host or '', port), protocol)
+        super().__init__(family, type, (str(host or ''), port), protocol)
 
     @classmethod
     def decode_addr(cls, args: List[str]) -> Tuple[O[IPAddr], O[bool], List[str]]:
@@ -182,7 +196,7 @@ class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
             raise ValueError("IPv4 address given for IPv6 socket")
         return addr
 
-    def _bind(self, s: SocketType, reuse: bool = False) -> None:
+    def _bind(self, s: Tuple[str, int], reuse: bool = False) -> None:
         if self.dualstack is not None and self.family == socket.AF_INET6 and hasattr(socket, 'IPV6_V6ONLY'):
             s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0 if self.dualstack else 1)
         if reuse:
