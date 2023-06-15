@@ -184,7 +184,7 @@ class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
 
     def _bind(self, s: SocketType, reuse: bool = False) -> None:
         if self.dualstack is not None and self.family == socket.AF_INET6 and hasattr(socket, 'IPV6_V6ONLY'):
-            s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1 if self.dualstack else 0)
+            s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0 if self.dualstack else 1)
         if reuse:
             if hasattr(socket, "SO_REUSEPORT"):
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
