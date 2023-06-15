@@ -119,32 +119,50 @@ IPAddr: TypeAlias = Tuple[O[IPAddress], int]
 
 @dataclass(init=False, frozen=True)
 class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
-    def __init__(self, type: int, addr: IPAddr, protocol: int = 0) -> None:
+    dualstack: bool
+
+    def __init__(self, type: int, addr: IPAddr, protocol: int = 0, dualstack: O[bool] = None) -> None:
         host, port = addr
         if isinstance(host, IPv6Address):
             family = socket.AF_INET6
+            dualstack_val = dualstack or False
         elif isinstance(host, IPv4Address):
             family = socket.AF_INET
+            dualstack_val = False
         else:
-            if socket.has_dualstack_ipv6():
+            if socket.has_dualstack_ipv6() and dualstack is not False:
                 family = socket.AF_INET6
+                dualstack_val = True
             else:
                 family = socket.AF_INET
+                dualstack_val = False
 
+        if dualstack_val and not socket.has_dualstack_ipv6():
+            raise ValueError('dual-stack requested but not available')
+        object.__setattr__(self, 'dualstack', dualstack_val)
         super().__init__(family, type, (host or '', port), protocol)
 
     @classmethod
-    def decode_addr(cls, args: List[str]) -> Tuple[O[IPAddr], List[str]]:
+    def decode_addr(cls, args: List[str]) -> Tuple[O[IPAddr], O[bool], List[str]]:
         try:
             host = ipaddress.ip_address(args[0]) if args[0] else None
             port = int(args[1])
         except (KeyError, ValueError):
             return (None, args)
-        return ((host, port), args[2:])
+        if len(args) > 2 and args[2] in ('single', 'dual'):
+            dualstack = args[2] == 'dual'
+            ri = 3
+        else:
+            dualstack = 0
+            ri = 2
+        return ((host, port), args[ri:])
 
     def encode_addr(self) -> List[str]:
         host, port = self.addr
-        return [str(host) if host else "", str(port)]
+        extra = []
+        if self.dualstack is not None:
+            extra.append('dual' if self.dualstack else 'single')
+        return [str(host) if host else "", str(port)] + extra
 
     @classmethod
     def check_ipv4(cls, addr: IPAddr) -> IPAddr:
@@ -165,6 +183,8 @@ class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
         return addr
 
     def _bind(self, s: SocketType, reuse: bool = False) -> None:
+        if self.dualstack is not None and self.family == socket.AF_INET6 and hasattr(socket, 'IPV6_V6ONLY'):
+            s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1 if self.dualstack else 0)
         if reuse:
             if hasattr(socket, "SO_REUSEPORT"):
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
@@ -176,19 +196,19 @@ class IPResource(SocketResource[Tuple[U[IPAddress, str], int]]):
 class TCPResource(IPResource):
     IDENTS = ("tcp", "tcp4", "tcp6")
 
-    def __init__(self, addr: IPAddr) -> None:
-        super().__init__(socket.SOCK_STREAM, addr, protocol=socket.IPPROTO_TCP)
+    def __init__(self, addr: IPAddr, dualstack: O[bool] = None) -> None:
+        super().__init__(socket.SOCK_STREAM, addr, protocol=socket.IPPROTO_TCP, dualstack=dualstack)
 
     @classmethod
     def decode_spec(cls, ident: str, args: List[str]) -> O[Self]:
-        addr, args = cls.decode_addr(args)
+        addr, dualstack, args = cls.decode_addr(args)
         if not addr:
             return None
         if ident == "tcp4":
             addr = cls.check_ipv4(addr)
         elif ident == "tcp6":
             addr = cls.check_ipv6(addr)
-        return cls(addr)
+        return cls(addr, dualstack=dualstack)
 
     def encode_spec(self) -> Tuple[str, List[str]]:
         host, port = self.addr
@@ -204,19 +224,19 @@ class TCPResource(IPResource):
 class UDPResource(IPResource):
     IDENTS = ("udp", "udp4", "udp6")
 
-    def __init__(self, addr: IPAddr) -> None:
-        super().__init__(socket.SOCK_DGRAM, addr, protocol=socket.IPPROTO_UDP)
+    def __init__(self, addr: IPAddr, dualstack: O[bool] = None) -> None:
+        super().__init__(socket.SOCK_DGRAM, addr, protocol=socket.IPPROTO_UDP, dualstack=dualstack)
 
     @classmethod
     def decode_spec(cls, ident: str, args: List[str]) -> O[Self]:
-        addr, args = cls.decode_addr(args)
+        addr, dualstack, args = cls.decode_addr(args)
         if not addr:
             return None
         if ident == "udp4":
             addr = cls.check_ipv4(addr)
         elif ident == "udp6":
             addr = cls.check_ipv6(addr)
-        return cls(addr)
+        return cls(addr, dualstack=dualstack)
 
     def encode_spec(self) -> Tuple[str, List[str]]:
         host, port = self.addr
